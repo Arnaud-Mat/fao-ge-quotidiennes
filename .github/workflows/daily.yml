@@ -1,0 +1,44 @@
+name: Récupération quotidienne FAO Genève
+
+on:
+  schedule:
+    # 08:00 heure suisse ≈ 06:00 UTC (CET) / 07:00 UTC en aucun cas avant —
+    # on prend une marge et on tourne à 09:00 UTC (11h CEST / 10h CET), après
+    # la publication matinale habituelle.
+    - cron: "0 9 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Télécharger la quotidienne du jour
+        run: python fetch_quotidienne.py
+
+      - name: Commit et push si nouveau PDF
+        run: |
+          git config user.name "fao-ge-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add pdfs/
+          if git diff --cached --quiet; then
+            echo "Rien de nouveau à committer."
+          else
+            git commit -m "Quotidienne FAO Genève $(date -u +%Y-%m-%d)"
+            git push
+          fi
