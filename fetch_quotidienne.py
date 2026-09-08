@@ -66,13 +66,28 @@ def main() -> int:
 
         # Page anti-bot : elle affiche "Vous allez être redirigé..." puis se
         # recharge automatiquement une fois le cookie posé. On attend que le
-        # vrai contenu (lien PDF) apparaisse, avec un fallback "wait+reload".
-        try:
-            page.wait_for_selector("text=Version PDF imprimable", timeout=20_000)
-        except Exception:
-            page.wait_for_timeout(4000)
-            page.reload(wait_until="networkidle", timeout=60_000)
-            page.wait_for_selector("text=Version PDF imprimable", timeout=20_000)
+        # vrai contenu (lien PDF) apparaisse, avec plusieurs tentatives
+        # (attente + reload) avant d'abandonner.
+        found = False
+        last_error = None
+        for attempt in range(4):
+            try:
+                page.wait_for_selector("text=Version PDF imprimable", timeout=15_000)
+                found = True
+                break
+            except Exception as exc:
+                last_error = exc
+                print(f"Tentative {attempt + 1} échouée, titre={page.title()!r}, url={page.url!r}")
+                page.wait_for_timeout(5000)
+                try:
+                    page.reload(wait_until="networkidle", timeout=60_000)
+                except Exception:
+                    pass
+
+        if not found:
+            snippet = page.inner_text("body")[:2000]
+            print("Contenu de la page après échec :\n" + snippet, file=sys.stderr)
+            raise last_error
 
         # Le premier bloc de la liste = l'édition la plus récente.
         first_article = page.locator("article").first
